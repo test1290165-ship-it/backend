@@ -31,7 +31,7 @@ const swaggerOptions = {
       description: 'CRUD API with Express & MongoDB',
     },
     servers: [
-      { url: `http://localhost:${PORT}` },
+      { url: `http://backend:${PORT}` },
     ],
   },
   apis: ['./src/routers/*.js'],
