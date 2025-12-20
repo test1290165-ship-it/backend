@@ -11,6 +11,9 @@ const userSchema = new mongoose.Schema({
   newPassword: String,
   confirmPassword: String,
   profilePhoto: String   ,
+  // OTP-based password reset
+  otpCode: String,
+  otpExpires: Date,
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);

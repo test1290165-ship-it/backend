@@ -151,31 +151,25 @@ export const forgotPassword = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Generate token
-    const token = crypto.randomBytes(20).toString("hex");
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Store in DB with expiry 1 hour
-    user.resetPasswordToken = token;
-    user.resetPasswordExpires = Date.now() + 3600000;
+    // Store OTP in DB with expiry 5 minutes
+    user.otpCode = otp;
+    user.otpExpires = Date.now() + 5 * 60 * 1000; // 5 minutes
     await user.save();
-    // Prepare reset URL (use FRONTEND_URL in production if provided)
-    const resetBaseUrl = process.env.FRONTEND_URL
-      ? `${process.env.FRONTEND_URL}`
-      : "http://localhost:3000";
-    const resetUrl = `${resetBaseUrl.replace(/\/$/, "")}/reset-password/${token}`;
 
-    // In production environments on hosts like Render, outgoing SMTP can hang.
-    // To keep the API responsive for Swagger/live usage, we avoid blocking on
-    // email sending in production and just return the reset link info.
+    // In production, avoid hanging on SMTP; log/return OTP info.
     if (process.env.NODE_ENV === "production") {
-      console.log("Password reset link:", resetUrl);
+      console.log("Password reset OTP for", user.email, ":", otp);
       return res.status(200).json({
-        message: "Reset link generated successfully",
-        resetLink: resetUrl,
+        message: "OTP generated and sent (simulation in production)",
+        // You can remove otp from response later for security; kept for easy testing
+        otp,
       });
     }
 
-    // For non-production (local/dev), still attempt to send the email.
+    // For non-production (local/dev), attempt to send the OTP via email.
     try {
       const transporter = nodemailer.createTransport({
         service: "Gmail",
@@ -188,19 +182,17 @@ export const forgotPassword = async (req, res) => {
       const mailOptions = {
         to: user.email,
         from: process.env.EMAIL_USER,
-        subject: "Password Reset",
-        text: `Click this link to reset your password: ${resetUrl}`,
+        subject: "Password Reset OTP",
+        text: `Your password reset OTP is: ${otp}. It will expire in 5 minutes.`,
       };
 
       await transporter.sendMail(mailOptions);
 
-      return res.status(200).json({ message: "Reset link sent to email" });
+      return res.status(200).json({ message: "OTP sent to email" });
     } catch (mailError) {
-      // Log the mail error but still respond so Swagger doesn't hang
-      console.error("Error sending reset email:", mailError.message || mailError);
-      return res.status(200).json({
-        message: "Reset link generated, but email could not be sent",
-        resetLink: resetUrl,
+      console.error("Error sending reset OTP email:", mailError.message || mailError);
+      return res.status(500).json({
+        message: "Could not send OTP email",
       });
     }
   } catch (error) {
@@ -211,10 +203,10 @@ export const forgotPassword = async (req, res) => {
 // reset password 
 export const resetPassword = async (req, res) => {
   try {
-    const { email, oldPassword, newPassword, confirmPassword } = req.body;
+    const { email, otp, newPassword, confirmPassword } = req.body;
 
     // 1️⃣ Validation
-    if (!email || !oldPassword || !newPassword || !confirmPassword) {
+    if (!email || !otp || !newPassword || !confirmPassword) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -226,12 +218,24 @@ export const resetPassword = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // 3️⃣ Compare old password
-    const isMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Old password is incorrect" });
+    // 3️⃣ Validate OTP and expiry
+    if (!user.otpCode || !user.otpExpires) {
+      return res.status(400).json({ message: "OTP not requested" });
+    }
+
+    if (user.otpCode !== otp) {
+      return res.status(400).json({ message: "OTP wrong" });
+    }
+
+    if (user.otpExpires < Date.now()) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
 
     // 4️⃣ Update password
     user.password = await bcrypt.hash(newPassword, 10);
+    // Clear OTP fields after successful reset
+    user.otpCode = undefined;
+    user.otpExpires = undefined;
     await user.save();
 
     res.status(200).json({ message: "Password has been updated successfully" });

@@ -213,7 +213,7 @@ router.post("/logout", auth, logoutUser);
  * @swagger
  * /api/auth/forgot-password:
  *   post:
- *     summary: Request password reset link
+ *     summary: Request password reset OTP
  *     tags: [Users]
  *     requestBody:
  *       required: true
@@ -229,7 +229,7 @@ router.post("/logout", auth, logoutUser);
  *                 example: test@gmail.com
  *     responses:
  *       200:
- *         description: Reset link sent successfully
+ *         description: OTP generated or sent successfully
  *         content:
  *           application/json:
  *             schema:
@@ -237,7 +237,10 @@ router.post("/logout", auth, logoutUser);
  *               properties:
  *                 message:
  *                   type: string
- *                   example: Reset link sent to email
+ *                   example: OTP sent to email
+ *                 otp:
+ *                   type: string
+ *                   example: "123456"
  *       400:
  *         description: Email missing or invalid
  *         content:
@@ -267,7 +270,7 @@ router.post("/forgot-password", forgotPassword);
  * @swagger
  * /api/auth/reset-password:
  *   post:
- *     summary: Reset password using old password (no token required)
+ *     summary: Reset password using email OTP
  *     tags: [Users]
  *     requestBody:
  *       required: true
@@ -277,16 +280,16 @@ router.post("/forgot-password", forgotPassword);
  *             type: object
  *             required:
  *               - email
- *               - oldPassword
+ *               - otp
  *               - newPassword
  *               - confirmPassword
  *             properties:
  *               email:
  *                 type: string
  *                 example: user@gmail.com
- *               oldPassword:
+ *               otp:
  *                 type: string
- *                 example: old123
+ *                 example: "123456"
  *               newPassword:
  *                 type: string
  *                 example: new123
@@ -305,7 +308,7 @@ router.post("/forgot-password", forgotPassword);
  *                   type: string
  *                   example: Password has been updated successfully
  *       400:
- *         description: Validation error (fields missing, old password wrong, mismatch)
+ *         description: Validation error (fields missing, OTP wrong/expired, mismatch)
  *         content:
  *           application/json:
  *             schema:
@@ -313,7 +316,7 @@ router.post("/forgot-password", forgotPassword);
  *               properties:
  *                 message:
  *                   type: string
- *                   example: Old password is incorrect
+ *                   example: OTP wrong
  *       404:
  *         description: User not found
  *         content:
