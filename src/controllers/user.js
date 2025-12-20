@@ -154,33 +154,49 @@ export const forgotPassword = async (req, res) => {
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-   
+    // Store OTP in DB with expiry 5 minutes
     user.otpCode = otp;
     user.otpExpires = Date.now() + 5 * 60 * 1000; // 5 minutes
     await user.save();
 
-    // Attempt to send the OTP via email in all environments.
-    try {
+    // Prepare transporter and mail details
     const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
 
+    const mailOptions = {
+      to: user.email,
+      from: process.env.EMAIL_USER,
+      subject: "Password Reset OTP",
+      text: `Your password reset OTP is: ${otp}. It will expire in 5 minutes.`,
+    };
 
-      const mailOptions = {
-        to: user.email,
-        from: process.env.EMAIL_USER,
-        subject: "Password Reset OTP",
-        text: `Your password reset OTP is: ${otp}. It will expire in 5 minutes.`,
-      };
+    // In production (e.g. Render), fire-and-forget so the request doesn't hang
+    if (process.env.NODE_ENV === "production") {
+      transporter
+        .sendMail(mailOptions)
+        .then(() => {
+          console.log("Password reset OTP email sent to", user.email);
+        })
+        .catch((mailError) => {
+          console.error(
+            "Error sending reset OTP email (production):",
+            mailError.message || mailError
+          );
+        });
 
+      return res.status(200).json({ message: "OTP sent to email" });
+    }
+
+    // In non-production, await so you see SMTP errors while developing
+    try {
       await transporter.sendMail(mailOptions);
-
       return res.status(200).json({ message: "OTP sent to email" });
     } catch (mailError) {
       console.error("Error sending reset OTP email:", mailError.message || mailError);
