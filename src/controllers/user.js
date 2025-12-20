@@ -151,18 +151,17 @@ export const forgotPassword = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Generate 6-digit OTP
+   
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Store OTP in DB with expiry 5 minutes
+  
     user.otpCode = otp;
     user.otpExpires = Date.now() + 5 * 60 * 1000; // 5 minutes
     await user.save();
 
-    // Prepare transporter and mail details
     const transporter = nodemailer.createTransport({
         host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
+  port: parseInt(process.env.EMAIL_PORT),
       secure: process.env.EMAIL_SECURE === "true",
       auth: {
         user: process.env.EMAIL_USER,
