@@ -174,7 +174,7 @@ export const forgotPassword = async (req, res) => {
       to: user.email,
       from: process.env.EMAIL_USER,
       subject: "Password Reset OTP",
-      text: `Your password reset OTP is: ${otp}. It will expire in 5 minutes.`,
+      text: `Dear user, your password reset code is ${otp}. This code will expire in 5 minutes. For security reasons, please do not share it with anyone.`,
     };
 
     // In production (e.g. Render), fire-and-forget so the request doesn't hang
