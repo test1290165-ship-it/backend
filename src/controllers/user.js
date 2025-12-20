@@ -1,9 +1,13 @@
 import User from '../models/user.js';
 import bcrypt from 'bcryptjs'; 
 import jwt from 'jsonwebtoken';
-
+import BlacklistedToken from '../models/BlacklistedToken.js';
+import mongoose from 'mongoose';
+import crypto from "crypto";
+import nodemailer from "nodemailer";
 
 // CREATE USER
+
 export const createUser = async (req, res) => {
   try {
     const { name, email, password, mobile } = req.body;
@@ -44,7 +48,6 @@ export const createUser = async (req, res) => {
   }
 };
 
-
 // GET ALL USERS
 export const getUsers = async (req, res) => {
   try {
@@ -55,20 +58,193 @@ export const getUsers = async (req, res) => {
   }
 };
 
+//Login user
 
-export const loginuser=async(req,res)=>{
-  try{
-    const {email,password}=req.body;
-    const user=await User.findOne({email});
-    if(!user) return res.status(400).json({message:"User not found"});
-    const isPasswordValid=await bcrypt.compare(password,user.password);
-    if(!isPasswordValid) return res.status(400).json({message:"Invalid password"});
-    const token=jwt.sign({id:user._id},process.env.JWT_SECRET,{
-      expiresIn:"1h"
-    })
-    res.json({message:"Login successful",token})
-    
-  }catch(error){
-    res.status(500).json({message:error.message})
-  }
+export const loginusers=async(req,res)=>{
+    try {
+        const {email,password}=req.body;
+
+        if(!email||!password){
+            return res.status(400).json({message:"All fields are required"});
+        }
+
+        const user=await User.findOne({email});
+        if(!user){
+            return res.status(400).json({message:"User not found"});
+        }
+
+        const isPasswordValid=await bcrypt.compare(password,user.password);
+        if(!isPasswordValid){
+            return res.status(400).json({message:"Invalid password"});
+        }
+
+        const token=jwt.sign({id:user._id},process.env.JWT_SECRET,{
+            expiresIn:"1h"
+        });
+        const userdata={
+          id:user._id,
+          name:user.name,
+          email:user.email,
+          mobile:user.mobile
+        }
+
+        res.status(200).json({message:"Login successful",token,userdata});        
+    } catch (error) {
+        res.status(500).json({message:error.message});
+    }
 }
+
+
+//Get user by id
+
+export const getUserById = async (req, res) => {
+  try {
+    const { id } = req.params; // URL se id milegi
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    const user = await User.findById(id).select("-password"); 
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: user,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+//Logout user
+
+export const logoutUser = async (req, res) => {
+  try {
+    const token = req.token;
+    const decoded = req.user;
+
+    await BlacklistedToken.create({
+      token,
+      expiresAt: new Date(decoded.exp * 1000),
+    });
+
+    return res.status(200).json({ message: "Logout successful" });
+
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid token" });
+  }
+};
+
+
+// forgot password
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Generate token
+    const token = crypto.randomBytes(20).toString("hex");
+
+    // Store in DB with expiry 1 hour
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = Date.now() + 3600000;
+    await user.save();
+
+    // Send email
+    const transporter = nodemailer.createTransport({
+      service: "Gmail", // ya koi SMTP
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+
+    const mailOptions = {
+      to: user.email,
+      from: process.env.EMAIL_USER,
+      subject: "Password Reset",
+      text: `Click this link to reset your password: http://localhost:3000/reset-password/${token}`
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({ message: "Reset link sent to email" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// reset password 
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, oldPassword, newPassword, confirmPassword } = req.body;
+
+    // 1️⃣ Validation
+    if (!email || !oldPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: "New password and confirm password do not match" });
+    }
+
+    // 2️⃣ Find user by email
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // 3️⃣ Compare old password
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) return res.status(400).json({ message: "Old password is incorrect" });
+
+    // 4️⃣ Update password
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    res.status(200).json({ message: "Password has been updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+//upload profile photo
+
+export const uploadProfilePhoto = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Please upload an image" });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      { profilePhoto: req.file.path },
+      { new: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      message: "Profile photo uploaded successfully",
+      data: user
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+//
+
+
+

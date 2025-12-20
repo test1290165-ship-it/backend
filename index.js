@@ -14,7 +14,7 @@ const PORT = process.env.PORT || 8909;
 // Middlewares
 app.use(cors({ origin: "*" }));
 app.use(express.json());
-
+app.use("/uploads", express.static("uploads"));
 // MongoDB
 mongoose.connect(process.env.MONGO_URL)
   .then(() => console.log("MongoDB connected"))
@@ -22,6 +22,8 @@ mongoose.connect(process.env.MONGO_URL)
 
 // Routes
 app.use('/api/users', userRoutes);
+// Auth-style routes (forgot/reset password) share the same router
+app.use('/api/auth', userRoutes);
 
 // Swagger
 const swaggerOptions = {
@@ -40,6 +42,15 @@ const swaggerOptions = {
             : `http://localhost:${PORT}`,
       },
     ],
+     components: {
+      securitySchemes: {
+        BearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT"
+        }
+      }
+    }
   },
   apis: ['./src/routers/*.js'],
 };
