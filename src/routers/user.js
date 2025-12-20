@@ -238,9 +238,6 @@ router.post("/logout", auth, logoutUser);
  *                 message:
  *                   type: string
  *                   example: OTP sent to email
- *                 otp:
- *                   type: string
- *                   example: "123456"
  *       400:
  *         description: Email missing or invalid
  *         content:

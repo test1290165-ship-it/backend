@@ -159,17 +159,7 @@ export const forgotPassword = async (req, res) => {
     user.otpExpires = Date.now() + 5 * 60 * 1000; // 5 minutes
     await user.save();
 
-    // In production, avoid hanging on SMTP; log/return OTP info.
-    if (process.env.NODE_ENV === "production") {
-      console.log("Password reset OTP for", user.email, ":", otp);
-      return res.status(200).json({
-        message: "OTP generated and sent (simulation in production)",
-        // You can remove otp from response later for security; kept for easy testing
-        otp,
-      });
-    }
-
-    // For non-production (local/dev), attempt to send the OTP via email.
+    // Attempt to send the OTP via email in all environments.
     try {
       const transporter = nodemailer.createTransport({
         service: "Gmail",
