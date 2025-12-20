@@ -158,26 +158,51 @@ export const forgotPassword = async (req, res) => {
     user.resetPasswordToken = token;
     user.resetPasswordExpires = Date.now() + 3600000;
     await user.save();
+    // Prepare reset URL (use FRONTEND_URL in production if provided)
+    const resetBaseUrl = process.env.FRONTEND_URL
+      ? `${process.env.FRONTEND_URL}`
+      : "http://localhost:3000";
+    const resetUrl = `${resetBaseUrl.replace(/\/$/, "")}/reset-password/${token}`;
 
-    // Send email
-    const transporter = nodemailer.createTransport({
-      service: "Gmail", // ya koi SMTP
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
+    // In production environments on hosts like Render, outgoing SMTP can hang.
+    // To keep the API responsive for Swagger/live usage, we avoid blocking on
+    // email sending in production and just return the reset link info.
+    if (process.env.NODE_ENV === "production") {
+      console.log("Password reset link:", resetUrl);
+      return res.status(200).json({
+        message: "Reset link generated successfully",
+        resetLink: resetUrl,
+      });
+    }
 
-    const mailOptions = {
-      to: user.email,
-      from: process.env.EMAIL_USER,
-      subject: "Password Reset",
-      text: `Click this link to reset your password: http://localhost:3000/reset-password/${token}`
-    };
+    // For non-production (local/dev), still attempt to send the email.
+    try {
+      const transporter = nodemailer.createTransport({
+        service: "Gmail",
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
 
-    await transporter.sendMail(mailOptions);
+      const mailOptions = {
+        to: user.email,
+        from: process.env.EMAIL_USER,
+        subject: "Password Reset",
+        text: `Click this link to reset your password: ${resetUrl}`,
+      };
 
-    res.status(200).json({ message: "Reset link sent to email" });
+      await transporter.sendMail(mailOptions);
+
+      return res.status(200).json({ message: "Reset link sent to email" });
+    } catch (mailError) {
+      // Log the mail error but still respond so Swagger doesn't hang
+      console.error("Error sending reset email:", mailError.message || mailError);
+      return res.status(200).json({
+        message: "Reset link generated, but email could not be sent",
+        resetLink: resetUrl,
+      });
+    }
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
