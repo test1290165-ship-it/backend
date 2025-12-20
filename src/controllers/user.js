@@ -171,7 +171,7 @@ export const forgotPassword = async (req, res) => {
 
     const mailOptions = {
       to: user.email,
-      from: process.env.EMAIL_USER,
+      from: `"Support Team" <${process.env.EMAIL_USER}>`,
       subject: "Password Reset OTP",
       text: `Dear user, your password reset code is ${otp}. This code will expire in 5 minutes. For security reasons, please do not share it with anyone.`,
     };
